@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Bot Nối Từ + Chat</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --panel: #111826;
+    --panel2: #161f2e;
+    --border: #233047;
+    --neon: #00e5ff;
+    --neon2: #7c4dff;
+    --text: #e6f1ff;
+    --muted: #7d8aa3;
+    --danger: #ff4d6d;
+    --success: #00e676;
+    --warn: #ffab00;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: radial-gradient(circle at 20% 10%, #0d1626 0%, #060a12 60%, #04060a 100%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container { max-width: 980px; margin: 0 auto; }
+  h1 {
+    font-size: 24px;
+    background: linear-gradient(90deg, var(--neon), var(--neon2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin-bottom: 6px;
+  }
+  h3 { font-size: 15px; margin-bottom: 10px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .card {
+    background: linear-gradient(145deg, var(--panel), var(--panel2));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input[type="text"], input[type="password"], textarea, select {
+    background: #0b1220;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 11px 14px;
+    font-size: 14px;
+    outline: none;
+    font-family: inherit;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus {
+    border-color: var(--neon);
+    box-shadow: 0 0 0 3px rgba(0,229,255,0.12);
+  }
+  textarea { width: 100%; min-height: 100px; resize: vertical; }
+  select { min-width: 140px; }
+  button {
+    cursor: pointer; font-family: inherit; border: none;
+    padding: 11px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+    transition: 0.15s;
+  }
+  .btnPrimary {
+    background: linear-gradient(90deg, var(--neon), var(--neon2));
+    color: #04101a;
+  }
+  .btnPrimary:hover { filter: brightness(1.1); }
+  .btnDanger {
+    background: transparent; border: 1px solid var(--danger); color: var(--danger);
+  }
+  .btnDanger:hover { background: rgba(255,77,109,0.15); }
+  .btnGhost {
+    background: transparent; border: 1px solid var(--border); color: var(--text);
+  }
+  .btnGhost:hover { border-color: var(--neon2); color: var(--neon2); }
+  .btnWarn {
+    background: transparent; border: 1px solid var(--warn); color: var(--warn);
+  }
+  .btnBot {
+    background: linear-gradient(135deg, rgba(124,77,255,0.3), rgba(0,229,255,0.2));
+    border: 1px solid rgba(124,77,255,0.5);
+    color: var(--neon);
+  }
+  .btnBot:hover { filter: brightness(1.15); }
+  .stats {
+    display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px;
+    font-size: 13px; color: var(--muted);
+  }
+  .stats b { color: var(--neon); }
+  #wordList, #msgList {
+    max-height: 380px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: #0b1220;
+  }
+  .word-item, .msg-item {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    font-size: 13.5px;
+  }
+  .word-item:last-child, .msg-item:last-child { border-bottom: none; }
+  .word-item:hover, .msg-item:hover { background: rgba(0,229,255,0.05); }
+  .word-item .del, .msg-item .del {
+    background: none; border: none; color: var(--danger);
+    cursor: pointer; font-size: 16px; padding: 4px 8px; flex-shrink: 0;
+  }
+  .msg-item .meta {
+    font-size: 11px; color: var(--muted); margin-bottom: 3px;
+  }
+  .msg-item .meta .sender { color: var(--neon2); font-weight: 700; }
+  .msg-item .meta .sender.bot { color: var(--neon); }
+  .msg-item .body { word-break: break-word; white-space: pre-wrap; line-height: 1.35; }
+  .msg {
+    margin-top: 10px; font-size: 13px; min-height: 18px;
+  }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: var(--success); }
+  .auth-box { max-width: 360px; margin: 80px auto; }
+  #mainUI { display: none; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .tabs {
+    display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .tab {
+    padding: 10px 18px; border-radius: 10px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); font-weight: 600; cursor: pointer;
+  }
+  .tab.active {
+    background: linear-gradient(90deg, rgba(0,229,255,0.15), rgba(124,77,255,0.15));
+    border-color: var(--neon);
+    color: var(--text);
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- AUTH -->
+  <div id="authUI" class="card auth-box">
+    <h1>🔐 Admin Bot + Chat</h1>
+    <p class="sub">Quản lý từ điển · Xoá tin nhắn · Nhắn tin với tư cách Bot</p>
+    <div class="row" style="margin-top:16px">
+      <input type="password" id="adminPass" placeholder="Mật khẩu admin" style="flex:1">
+      <button class="btnPrimary" id="loginBtn">Vào</button>
+    </div>
+    <div id="authMsg" class="msg"></div>
+    <p class="hint">Mật khẩu mặc định: <code>adminbot2024</code> (đổi trong code nếu cần)</p>
+  </div>
+
+  <!-- MAIN -->
+  <div id="mainUI">
+    <h1>🛠️ Admin Bot Nối Từ + Chat</h1>
+    <p class="sub">Từ điển đồng bộ Firebase · Quản lý tin nhắn phòng chat</p>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="words">📚 Từ điển</button>
+      <button class="tab" data-tab="chat">💬 Tin nhắn chat</button>
+      <button class="tab" data-tab="postbot">🤖 Nhắn như Bot</button>
+    </div>
+
+    <!-- ===== TAB: WORDS ===== -->
+    <div id="panel-words" class="panel active">
+      <div class="card">
+        <div class="stats">
+          <span>Tổng từ: <b id="totalCount">0</b></span>
+          <span>Hiển thị: <b id="shownCount">0</b></span>
+          <span id="statusText" style="color:var(--muted)">Đang tải...</span>
+        </div>
+        <div class="row" style="margin-bottom:12px">
+          <input type="text" id="searchInput" placeholder="Tìm từ..." style="flex:1; min-width:180px">
+          <button class="btnGhost" id="reloadBtn">↻ Tải lại</button>
+          <button class="btnDanger" id="clearAllBtn">Xoá hết từ</button>
+        </div>
+        <div id="wordList"></div>
+      </div>
+
+      <div class="card">
+        <h3>➕ Thêm 1 từ</h3>
+        <div class="row">
+          <input type="text" id="addInput" placeholder="Ví dụ: học sinh" style="flex:1; min-width:180px" maxlength="40">
+          <button class="btnPrimary" id="addBtn">Thêm</button>
+        </div>
+        <div id="addMsg" class="msg"></div>
+      </div>
+
+      <div class="card">
+        <h3>📥 Thêm hàng loạt (mỗi dòng 1 từ)</h3>
+        <textarea id="bulkInput" placeholder="học sinh&#10;sinh viên&#10;viên chức&#10;..."></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="btnPrimary" id="bulkAddBtn">Thêm tất cả</button>
+          <button class="btnGhost" id="clearBulkBtn">Xoá ô</button>
+        </div>
+        <div id="bulkMsg" class="msg"></div>
+        <p class="hint">Chỉ nhận từ ghép đúng 2 tiếng (có 1 khoảng trắng).</p>
+      </div>
+
+      <div class="card">
+        <h3>📥 Import toàn bộ Viet74K (từ 2 tiếng)</h3>
+        <p class="hint" style="margin-bottom:10px">
+          Tải danh sách ~74.000 từ từ GitHub, lọc chỉ từ ghép <b>đúng 2 tiếng</b> (~48.000 từ),
+          rồi nạp lên Firebase theo lô. Có thể mất 1–3 phút tùy mạng.
+        </p>
+        <div class="row" style="margin-bottom:8px">
+          <label style="font-size:13px;color:var(--muted)">
+            <input type="checkbox" id="importReplace" style="margin-right:6px"> Ghi đè toàn bộ từ điển hiện tại
+          </label>
+        </div>
+        <button class="btnWarn" id="importVietBtn">Import Viet74K → Firebase</button>
+        <div id="importMsg" class="msg"></div>
+        <div id="importProgress" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+      </div>
+    </div>
+
+    <!-- ===== TAB: CHAT MESSAGES ===== -->
+    <div id="panel-chat" class="panel">
+      <div class="card">
+        <div class="stats">
+          <span>Tin đang hiện: <b id="msgCount">0</b></span>
+          <span id="msgStatus" style="color:var(--muted)">Chưa tải</span>
+        </div>
+        <div class="row" style="margin-bottom:12px">
+          <button class="btnGhost" id="reloadMsgBtn">↻ Tải 80 tin gần nhất</button>
+          <button class="btnDanger" id="clearAllMsgBtn">Xoá toàn bộ tin chat</button>
+        </div>
+        <div id="msgList"></div>
+        <p class="hint">Bấm ✕ bên phải để xoá từng tin. Thay đổi có hiệu lực ngay trên mọi client đang mở chat.</p>
+      </div>
+    </div>
+
+    <!-- ===== TAB: POST AS BOT ===== -->
+    <div id="panel-postbot" class="panel">
+      <div class="card">
+        <h3>🤖 Gửi tin nhắn với tư cách Bot / System</h3>
+        <div class="row" style="margin-bottom:12px">
+          <label style="font-size:13px; color:var(--muted)">Loại tin:</label>
+          <select id="postType">
+            <option value="bot">🤖 Bot Nối Từ</option>
+            <option value="system">📌 System (in nghiêng giữa)</option>
+          </select>
+        </div>
+        <textarea id="botMsgInput" placeholder="Nội dung tin nhắn bot sẽ hiện trong phòng chat chung..."></textarea>
+        <div class="row" style="margin-top:12px">
+          <button class="btnBot" id="sendBotBtn">Gửi vào chat</button>
+          <button class="btnGhost" id="clearBotInputBtn">Xoá ô</button>
+        </div>
+        <div id="postBotMsg" class="msg"></div>
+        <p class="hint">Tin sẽ xuất hiện ngay trong phòng chat của tất cả người đang online (cùng Firebase).</p>
+      </div>
+    </div>
+
+    <div class="row" style="justify-content:flex-end; margin-top:8px">
+      <button class="btnGhost" id="logoutBtn">Đăng xuất admin</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ==== FIREBASE (cùng project với chat) ====
+  const firebaseConfig = {
+    apiKey: "AIzaSyDwXvlkSjsdsVBPC6PlBJ9ifH_XCk_K1Sc",
+    authDomain: "web-chantodi.firebaseapp.com",
+    databaseURL: "https://web-chantodi-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "web-chantodi",
+    storageBucket: "web-chantodi.firebasestorage.app",
+    messagingSenderId: "752920225796",
+    appId: "1:752920225796:web:66707bc84be2e19294d51",
+    measurementId: "G-76PRLRLG0N"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const wordsRef = db.ref('bot_words');
+  const messagesRef = db.ref('chat_messages');
+
+  const ADMIN_PASSWORD = 'adminbot2024';
+  const BOT_NAME = '🤖 Bot Nối Từ';
+
+  let allWords = [];
+  let filtered = [];
+  let recentMsgs = []; // { key, ...data }
+
+  // ---------- AUTH ----------
+  const authUI = document.getElementById('authUI');
+  const mainUI = document.getElementById('mainUI');
+  const adminPass = document.getElementById('adminPass');
+  const authMsg = document.getElementById('authMsg');
+
+  function showAuthError(t) {
+    authMsg.className = 'msg err';
+    authMsg.textContent = t;
+  }
+
+  document.getElementById('loginBtn').onclick = () => {
+    if (adminPass.value === ADMIN_PASSWORD) {
+      sessionStorage.setItem('bot_admin_ok', '1');
+      authUI.style.display = 'none';
+      mainUI.style.display = 'block';
+      loadWords();
+    } else {
+      showAuthError('Sai mật khẩu');
+    }
+  };
+  adminPass.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('loginBtn').click(); });
+
+  if (sessionStorage.getItem('bot_admin_ok') === '1') {
+    authUI.style.display = 'none';
+    mainUI.style.display = 'block';
+  }
+
+  document.getElementById('logoutBtn').onclick = () => {
+    sessionStorage.removeItem('bot_admin_ok');
+    location.reload();
+  };
+
+  // ---------- TABS ----------
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      if (tab.dataset.tab === 'chat') loadMessages();
+    };
+  });
+
+  // ---------- HELPERS ----------
+  function normalize(str) {
+    return str.trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  // Firebase keys cannot contain . # $ / [ ]
+  function toSafeKey(word) {
+    return word.replace(/[.#$/\[\]]/g, '_');
+  }
+
+  function isValidWord(w) {
+    const n = normalize(w);
+    if (!n || !n.includes(' ')) return false;
+    const parts = n.split(' ');
+    return parts.length === 2 && parts[0].length > 0 && parts[1].length > 0;
+  }
+
+  function setStatus(text, ok = true) {
+    const el = document.getElementById('statusText');
+    el.textContent = text;
+    el.style.color = ok ? 'var(--muted)' : 'var(--danger)';
+  }
+
+  function updateCounts() {
+    document.getElementById('totalCount').textContent = allWords.length;
+    document.getElementById('shownCount').textContent = filtered.length;
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function formatTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+  }
+
+  // ========== WORDS ==========
+  function renderList() {
+    const q = normalize(document.getElementById('searchInput').value);
+    filtered = q ? allWords.filter(w => w.includes(q)) : allWords.slice();
+    const box = document.getElementById('wordList');
+    if (filtered.length === 0) {
+      box.innerHTML = '<div class="word-item" style="color:var(--muted)">Không có từ nào</div>';
+    } else {
+      const show = filtered.slice(0, 500);
+      box.innerHTML = show.map(w => `
+        <div class="word-item">
+          <span>${escapeHtml(w)}</span>
+          <button class="del" data-w="${escapeHtml(w)}" title="Xoá">✕</button>
+        </div>
+      `).join('');
+      if (filtered.length > 500) {
+        box.innerHTML += `<div class="word-item" style="color:var(--muted)">... và ${filtered.length - 500} từ nữa</div>`;
+      }
+      box.querySelectorAll('.del').forEach(btn => {
+        btn.onclick = () => deleteWord(btn.dataset.w);
+      });
+    }
+    updateCounts();
+  }
+
+  async function loadWords() {
+    setStatus('Đang tải từ Firebase...');
+    try {
+      const snap = await wordsRef.get();
+      if (snap.exists()) {
+        const val = snap.val();
+        if (Array.isArray(val)) {
+          allWords = val.map(normalize).filter(Boolean);
+        } else {
+          // Support { word: true } OR { safeKey: "actual word" }
+          allWords = Object.entries(val).map(([k, v]) => {
+            if (typeof v === 'string' && v.trim()) return normalize(v);
+            return normalize(k);
+          }).filter(Boolean);
+        }
+        allWords = [...new Set(allWords)].sort((a, b) => a.localeCompare(b, 'vi'));
+      } else {
+        allWords = [];
+      }
+      setStatus(`Đã tải ${allWords.length} từ`);
+      renderList();
+    } catch (e) {
+      setStatus('Lỗi tải: ' + e.message, false);
+      console.error(e);
+    }
+  }
+
+  document.getElementById('reloadBtn').onclick = loadWords;
+  document.getElementById('searchInput').addEventListener('input', renderList);
+
+  async function deleteWord(w) {
+    if (!confirm(`Xoá từ 「${w}」?`)) return;
+    try {
+      // Xoá cả key cũ (word) lẫn key mới (safeKey)
+      const updates = {};
+      updates[w] = null;
+      updates[toSafeKey(w)] = null;
+      await wordsRef.update(updates);
+      allWords = allWords.filter(x => x !== w);
+      renderList();
+      setStatus(`Đã xoá 「${w}」`);
+    } catch (e) {
+      alert('Lỗi xoá: ' + e.message);
+    }
+  }
+
+  document.getElementById('clearAllBtn').onclick = async () => {
+    if (!confirm('Xoá TOÀN BỘ từ điển? Không thể hoàn tác!')) return;
+    if (!confirm('Bạn chắc chắn 100%?')) return;
+    try {
+      await wordsRef.remove();
+      allWords = [];
+      renderList();
+      setStatus('Đã xoá hết từ');
+    } catch (e) {
+      alert('Lỗi: ' + e.message);
+    }
+  };
+
+  document.getElementById('addBtn').onclick = async () => {
+    const raw = document.getElementById('addInput').value;
+    const msg = document.getElementById('addMsg');
+    const n = normalize(raw);
+    if (!isValidWord(n)) {
+      msg.className = 'msg err';
+      msg.textContent = 'Từ phải đúng 2 tiếng. Ví dụ: học sinh';
+      return;
+    }
+    if (allWords.includes(n)) {
+      msg.className = 'msg err';
+      msg.textContent = 'Từ này đã có';
+      return;
+    }
+    try {
+      await wordsRef.child(toSafeKey(n)).set(n);
+      allWords.push(n);
+      allWords.sort((a, b) => a.localeCompare(b, 'vi'));
+      document.getElementById('addInput').value = '';
+      msg.className = 'msg ok';
+      msg.textContent = `Đã thêm 「${n}」`;
+      renderList();
+    } catch (e) {
+      msg.className = 'msg err';
+      msg.textContent = 'Lỗi: ' + e.message;
+    }
+  };
+  document.getElementById('addInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('addBtn').click();
+  });
+
+  document.getElementById('bulkAddBtn').onclick = async () => {
+    const raw = document.getElementById('bulkInput').value;
+    const msg = document.getElementById('bulkMsg');
+    const lines = raw.split(/\r?\n/).map(normalize).filter(Boolean);
+    const valid = [];
+    let skipInvalid = 0, skipExist = 0;
+    const existing = new Set(allWords);
+    for (const line of lines) {
+      if (!isValidWord(line)) { skipInvalid++; continue; }
+      if (existing.has(line)) { skipExist++; continue; }
+      valid.push(line);
+      existing.add(line);
+    }
+    if (valid.length === 0) {
+      msg.className = 'msg err';
+      msg.textContent = `Không có từ mới (bỏ qua ${skipInvalid} sai, ${skipExist} trùng)`;
+      return;
+    }
+    msg.className = 'msg';
+    msg.textContent = `Đang thêm ${valid.length} từ...`;
+    try {
+      const updates = {};
+      valid.forEach(w => { updates[toSafeKey(w)] = w; });
+      await wordsRef.update(updates);
+      allWords = [...existing].sort((a, b) => a.localeCompare(b, 'vi'));
+      msg.className = 'msg ok';
+      msg.textContent = `Đã thêm ${valid.length} từ. Bỏ qua: ${skipInvalid} sai, ${skipExist} trùng.`;
+      document.getElementById('bulkInput').value = '';
+      renderList();
+    } catch (e) {
+      msg.className = 'msg err';
+      msg.textContent = 'Lỗi: ' + e.message;
+    }
+  };
+  document.getElementById('clearBulkBtn').onclick = () => {
+    document.getElementById('bulkInput').value = '';
+    document.getElementById('bulkMsg').textContent = '';
+  };
+
+  // ========== IMPORT Viet74K ==========
+  const VIET74K_URL = 'https://raw.githubusercontent.com/duyet/vietnamese-wordlist/refs/heads/master/Viet74K.txt';
+  const BATCH_SIZE = 1500;
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  document.getElementById('importVietBtn').onclick = async () => {
+    const msg = document.getElementById('importMsg');
+    const prog = document.getElementById('importProgress');
+    const replace = document.getElementById('importReplace').checked;
+    const btn = document.getElementById('importVietBtn');
+
+    if (replace && allWords.length > 0) {
+      if (!confirm(`Ghi đè toàn bộ ${allWords.length} từ hiện tại bằng danh sách Viet74K?\nKhông thể hoàn tác.`)) return;
+    } else if (!replace && allWords.length > 0) {
+      if (!confirm(`Sẽ GỘP ~48.000 từ 2 tiếng từ Viet74K vào từ điển hiện có (${allWords.length} từ).\nTiếp tục?`)) return;
+    } else {
+      if (!confirm('Tải và nạp toàn bộ từ 2 tiếng từ Viet74K lên Firebase?\nCó thể mất 1–3 phút.')) return;
+    }
+
+    btn.disabled = true;
+    msg.className = 'msg';
+    msg.textContent = 'Đang tải file Viet74K từ GitHub...';
+    prog.textContent = '';
+
+    try {
+      const res = await fetch(VIET74K_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      msg.textContent = 'Đang lọc từ 2 tiếng...';
+
+      const lines = text.split(/\r?\n/);
+      const set = new Set();
+      for (const line of lines) {
+        const n = normalize(line);
+        if (!n) continue;
+        // đúng 2 tiếng: đúng 1 khoảng trắng
+        if (n.includes(' ') && n.split(' ').length === 2) {
+          const parts = n.split(' ');
+          if (parts[0] && parts[1]) set.add(n);
+        }
+      }
+      let list = [...set];
+      msg.textContent = `Đã lọc được ${list.length} từ 2 tiếng. Bắt đầu upload...`;
+
+      if (replace) {
+        // clear first
+        prog.textContent = 'Đang xoá từ điển cũ...';
+        await wordsRef.remove();
+        allWords = [];
+      } else {
+        // only new ones
+        const existing = new Set(allWords);
+        list = list.filter(w => !existing.has(w));
+        msg.textContent = `Còn ${list.length} từ mới cần thêm (đã có bỏ qua).`;
+      }
+
+      if (list.length === 0) {
+        msg.className = 'msg ok';
+        msg.textContent = 'Không có từ mới để thêm.';
+        prog.textContent = '';
+        btn.disabled = false;
+        await loadWords();
+        return;
+      }
+
+      let uploaded = 0;
+      for (let i = 0; i < list.length; i += BATCH_SIZE) {
+        const chunk = list.slice(i, i + BATCH_SIZE);
+        const updates = {};
+        chunk.forEach(w => { updates[toSafeKey(w)] = w; });
+        await wordsRef.update(updates);
+        uploaded += chunk.length;
+        prog.textContent = `Đã upload ${uploaded} / ${list.length} từ...`;
+        // nhỏ delay tránh rate-limit
+        await sleep(120);
+      }
+
+      msg.className = 'msg ok';
+      msg.textContent = `Hoàn tất! Đã nạp ${uploaded} từ từ Viet74K.`;
+      prog.textContent = '';
+      await loadWords();
+    } catch (e) {
+      console.error(e);
+      msg.className = 'msg err';
+      msg.textContent = 'Lỗi import: ' + e.message;
+      prog.textContent = '';
+    }
+    btn.disabled = false;
+  };
+
+  // ========== CHAT MESSAGES ==========
+  function renderMessages() {
+    const box = document.getElementById('msgList');
+    document.getElementById('msgCount').textContent = recentMsgs.length;
+    if (recentMsgs.length === 0) {
+      box.innerHTML = '<div class="msg-item" style="color:var(--muted)">Không có tin nhắn</div>';
+      return;
+    }
+    // newest first
+    const sorted = [...recentMsgs].sort((a, b) => (b.time || 0) - (a.time || 0));
+    box.innerHTML = sorted.map(m => {
+      const isBot = m.sender === BOT_NAME;
+      const isSys = m.type === 'system';
+      const senderLabel = isSys ? '📌 System' : escapeHtml(m.sender || '?');
+      const senderClass = isBot ? 'sender bot' : 'sender';
+      const body = escapeHtml(m.text || '').replace(/\n/g, '<br>');
+      return `
+        <div class="msg-item" data-key="${escapeHtml(m.key)}">
+          <div style="flex:1; min-width:0">
+            <div class="meta">
+              <span class="${senderClass}">${senderLabel}</span>
+              · ${formatTime(m.time)}
+              ${m.key ? `<span style="opacity:0.5"> · ${m.key.slice(-6)}</span>` : ''}
+            </div>
+            <div class="body">${body}</div>
+          </div>
+          <button class="del" title="Xoá tin này">✕</button>
+        </div>
+      `;
+    }).join('');
+    box.querySelectorAll('.msg-item .del').forEach(btn => {
+      btn.onclick = () => {
+        const item = btn.closest('.msg-item');
+        const key = item.dataset.key;
+        deleteMessage(key);
+      };
+    });
+  }
+
+  async function loadMessages() {
+    const st = document.getElementById('msgStatus');
+    st.textContent = 'Đang tải...';
+    st.style.color = 'var(--muted)';
+    try {
+      const snap = await messagesRef.limitToLast(80).get();
+      recentMsgs = [];
+      if (snap.exists()) {
+        snap.forEach(child => {
+          const v = child.val() || {};
+          recentMsgs.push({ key: child.key, ...v });
+        });
+      }
+      st.textContent = `Đã tải ${recentMsgs.length} tin`;
+      renderMessages();
+    } catch (e) {
+      st.textContent = 'Lỗi: ' + e.message;
+      st.style.color = 'var(--danger)';
+      console.error(e);
+    }
+  }
+
+  document.getElementById('reloadMsgBtn').onclick = loadMessages;
+
+  async function deleteMessage(key) {
+    if (!key) return;
+    if (!confirm('Xoá tin nhắn này khỏi phòng chat?')) return;
+    try {
+      await messagesRef.child(key).remove();
+      recentMsgs = recentMsgs.filter(m => m.key !== key);
+      renderMessages();
+      document.getElementById('msgStatus').textContent = 'Đã xoá 1 tin';
+    } catch (e) {
+      alert('Lỗi xoá tin: ' + e.message);
+    }
+  }
+
+  document.getElementById('clearAllMsgBtn').onclick = async () => {
+    if (!confirm('Xoá TOÀN BỘ tin nhắn trong phòng chat?\nHành động không thể hoàn tác!')) return;
+    if (!confirm('Xác nhận lần cuối: xoá hết chat?')) return;
+    try {
+      await messagesRef.remove();
+      recentMsgs = [];
+      renderMessages();
+      document.getElementById('msgStatus').textContent = 'Đã xoá toàn bộ tin chat';
+    } catch (e) {
+      alert('Lỗi: ' + e.message);
+    }
+  };
+
+  // ========== POST AS BOT ==========
+  document.getElementById('sendBotBtn').onclick = async () => {
+    const text = document.getElementById('botMsgInput').value.trim();
+    const type = document.getElementById('postType').value;
+    const msg = document.getElementById('postBotMsg');
+    if (!text) {
+      msg.className = 'msg err';
+      msg.textContent = 'Nhập nội dung trước khi gửi';
+      return;
+    }
+    try {
+      if (type === 'system') {
+        await messagesRef.push({
+          type: 'system',
+          text: text,
+          time: Date.now()
+        });
+      } else {
+        await messagesRef.push({
+          type: 'chat',
+          sender: BOT_NAME,
+          text: text,
+          time: Date.now()
+        });
+      }
+      msg.className = 'msg ok';
+      msg.textContent = type === 'system' ? 'Đã gửi tin System vào chat' : 'Đã gửi tin với tư cách Bot vào chat';
+      document.getElementById('botMsgInput').value = '';
+    } catch (e) {
+      msg.className = 'msg err';
+      msg.textContent = 'Lỗi gửi: ' + e.message;
+    }
+  };
+
+  document.getElementById('clearBotInputBtn').onclick = () => {
+    document.getElementById('botMsgInput').value = '';
+    document.getElementById('postBotMsg').textContent = '';
+  };
+
+  // Auto load if already logged in
+  if (sessionStorage.getItem('bot_admin_ok') === '1') {
+    loadWords();
+  }
+</script>
+</body>
+</html>
