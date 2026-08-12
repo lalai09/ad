@@ -111,6 +111,37 @@
   .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  #msgList {
+    max-height: 380px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: #0b1220;
+  }
+  .chat-item {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .chat-item:last-child { border-bottom: none; }
+  .chat-item:hover { background: rgba(0,229,255,0.04); }
+  .chat-item .meta {
+    flex: 1; min-width: 0;
+  }
+  .chat-item .sender {
+    font-weight: 700; color: var(--neon2); font-size: 12px; margin-bottom: 2px;
+  }
+  .chat-item .sender.bot { color: var(--neon); }
+  .chat-item .sender.system { color: var(--muted); font-style: italic; }
+  .chat-item .body {
+    color: var(--text); word-break: break-word; white-space: pre-wrap;
+  }
+  .chat-item .time {
+    font-size: 11px; color: var(--muted); margin-top: 3px;
+  }
+  .chat-item .del {
+    background: none; border: none; color: var(--danger);
+    cursor: pointer; font-size: 16px; padding: 4px 8px; flex-shrink: 0;
+  }
 </style>
 </head>
 <body>
@@ -195,6 +226,32 @@
       </div>
     </div>
 
+    <div class="card">
+      <h3 style="font-size:15px; margin-bottom:10px">💬 Nhắn tin dưới dạng Bot</h3>
+      <p class="hint" style="margin-bottom:10px">Tin sẽ hiện trong chat chung với tên & avatar Bot Nối Từ.</p>
+      <textarea id="botSendInput" placeholder="Nội dung tin nhắn bot..." style="min-height:80px"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btnPrimary" id="botSendBtn" type="button">Gửi như Bot</button>
+        <button class="btnGhost" id="botSendClearBtn" type="button">Xoá ô</button>
+      </div>
+      <div id="botSendMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:15px; margin-bottom:10px">🗂️ Quản lý tin nhắn</h3>
+      <div class="stats" style="margin-bottom:10px">
+        <span>Đang hiện: <b id="msgShownCount">0</b></span>
+        <span id="msgStatusText" style="color:var(--muted)">Chưa tải</span>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <input type="text" id="msgSearchInput" placeholder="Tìm theo tên / nội dung..." style="flex:1; min-width:160px">
+        <button class="btnGhost" id="msgReloadBtn" type="button">↻ Tải lại</button>
+        <button class="btnDanger" id="msgClearAllBtn" type="button">Xoá hết chat</button>
+      </div>
+      <div id="msgList"></div>
+      <p class="hint">Chỉ tải 100 tin mới nhất. Bấm ✕ để xoá từng tin.</p>
+    </div>
+
     <div class="row" style="justify-content:flex-end; margin-top:8px">
       <button class="btnGhost" id="logoutBtn">Đăng xuất admin</button>
     </div>
@@ -217,7 +274,11 @@
   const db = firebase.database();
   const wordsRef = db.ref('bot_words');
   const botConfigRef = db.ref('bot_config');
+  const messagesRef = db.ref('chat_messages');
   const DEFAULT_BOT_AVATAR = 'https://api.dicebear.com/7.x/bottts/svg?seed=BotNoiTu';
+  const BOT_NAME = '🤖 Bot ';
+  let currentBotAvatar = DEFAULT_BOT_AVATAR;
+  let chatMessages = []; // { key, ...data }
 
   // Mật khẩu admin (đổi thành mật khẩu riêng của bạn)
   const ADMIN_PASSWORD = 'adminbot2024';
@@ -236,6 +297,7 @@
     try {
       const snap = await botConfigRef.get();
       const av = (snap.exists() && snap.val() && snap.val().avatar) ? snap.val().avatar : DEFAULT_BOT_AVATAR;
+      currentBotAvatar = av;
       document.getElementById('botAvatarPreview').src = av;
       document.getElementById('botAvatarUrl').value = (av && !av.startsWith('data:')) ? av : '';
     } catch (e) {
@@ -272,6 +334,7 @@
 
   async function saveBotAvatar(avatar) {
     await botConfigRef.update({ avatar: avatar, updatedAt: Date.now() });
+    currentBotAvatar = avatar;
     document.getElementById('botAvatarPreview').src = avatar;
   }
 
@@ -348,6 +411,7 @@
       mainUI.style.display = 'block';
       loadWords();
       loadBotAvatarConfig();
+      loadChatMessages();
     } else {
       showAuthError('Sai mật khẩu');
     }
@@ -993,10 +1057,157 @@
     }
   };
 
+  // ---------- GỬI TIN NHƯ BOT ----------
+  document.getElementById('botSendBtn').onclick = async () => {
+    const el = document.getElementById('botSendInput');
+    const msg = document.getElementById('botSendMsg');
+    const text = (el.value || '').trim();
+    if (!text) {
+      msg.className = 'msg err';
+      msg.textContent = 'Nhập nội dung tin nhắn';
+      return;
+    }
+    try {
+      // Lấy avatar mới nhất
+      try {
+        const snap = await botConfigRef.get();
+        if (snap.exists() && snap.val() && snap.val().avatar) {
+          currentBotAvatar = snap.val().avatar;
+        }
+      } catch (_) {}
+      await messagesRef.push({
+        type: 'chat',
+        sender: BOT_NAME,
+        text: text,
+        time: Date.now(),
+        avatar: currentBotAvatar || DEFAULT_BOT_AVATAR
+      });
+      el.value = '';
+      msg.className = 'msg ok';
+      msg.textContent = 'Đã gửi tin như Bot vào chat chung!';
+      loadChatMessages();
+    } catch (e) {
+      msg.className = 'msg err';
+      msg.textContent = 'Lỗi gửi: ' + e.message;
+    }
+  };
+  document.getElementById('botSendClearBtn').onclick = () => {
+    document.getElementById('botSendInput').value = '';
+    document.getElementById('botSendMsg').textContent = '';
+  };
+
+  // ---------- QUẢN LÝ TIN NHẮN ----------
+  function setMsgStatus(text, ok) {
+    const el = document.getElementById('msgStatusText');
+    el.textContent = text;
+    el.style.color = ok === false ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  function formatMsgTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function renderChatMessages() {
+    const q = normalize(document.getElementById('msgSearchInput').value);
+    let list = chatMessages;
+    if (q) {
+      list = chatMessages.filter(m => {
+        const s = ((m.sender || '') + ' ' + (m.text || '')).toLowerCase();
+        return s.includes(q);
+      });
+    }
+    document.getElementById('msgShownCount').textContent = list.length;
+    const box = document.getElementById('msgList');
+    if (list.length === 0) {
+      box.innerHTML = '<div class="chat-item" style="color:var(--muted)">Không có tin nhắn</div>';
+      return;
+    }
+    // newest first
+    const sorted = list.slice().sort((a, b) => (b.time || 0) - (a.time || 0));
+    box.innerHTML = sorted.map(m => {
+      const isBot = m.sender === BOT_NAME;
+      const isSys = m.type === 'system';
+      const senderClass = isSys ? 'system' : (isBot ? 'bot' : '');
+      const senderLabel = isSys ? 'Hệ thống' : escapeHtml(m.sender || '?');
+      const body = escapeHtml(m.text || '');
+      return `
+        <div class="chat-item">
+          <div class="meta">
+            <div class="sender ${senderClass}">${senderLabel}</div>
+            <div class="body">${body}</div>
+            <div class="time">${formatMsgTime(m.time)}</div>
+          </div>
+          <button class="del" data-key="${escapeHtml(m.key)}" title="Xoá tin">✕</button>
+        </div>
+      `;
+    }).join('');
+    box.querySelectorAll('.del').forEach(btn => {
+      btn.onclick = () => deleteChatMessage(btn.dataset.key);
+    });
+  }
+
+  async function loadChatMessages() {
+    setMsgStatus('Đang tải tin nhắn...');
+    try {
+      const snap = await messagesRef.limitToLast(100).get();
+      chatMessages = [];
+      if (snap.exists()) {
+        snap.forEach(child => {
+          const v = child.val() || {};
+          chatMessages.push({
+            key: child.key,
+            type: v.type || 'chat',
+            sender: v.sender || '',
+            text: v.text || '',
+            time: v.time || 0
+          });
+        });
+      }
+      setMsgStatus(`Đã tải ${chatMessages.length} tin (mới nhất)`);
+      renderChatMessages();
+    } catch (e) {
+      setMsgStatus('Lỗi tải: ' + e.message, false);
+      console.error(e);
+    }
+  }
+
+  async function deleteChatMessage(key) {
+    if (!key) return;
+    if (!confirm('Xoá tin nhắn này?')) return;
+    try {
+      await messagesRef.child(key).remove();
+      chatMessages = chatMessages.filter(m => m.key !== key);
+      renderChatMessages();
+      setMsgStatus('Đã xoá 1 tin');
+    } catch (e) {
+      alert('Lỗi xoá: ' + e.message);
+    }
+  }
+
+  document.getElementById('msgReloadBtn').onclick = loadChatMessages;
+  document.getElementById('msgSearchInput').addEventListener('input', renderChatMessages);
+
+  document.getElementById('msgClearAllBtn').onclick = async () => {
+    if (!confirm('Xoá TOÀN BỘ tin nhắn trong chat? Không hoàn tác được!')) return;
+    if (!confirm('Bạn chắc chắn muốn xoá hết chat?')) return;
+    try {
+      await messagesRef.remove();
+      chatMessages = [];
+      renderChatMessages();
+      setMsgStatus('Đã xoá toàn bộ tin nhắn');
+    } catch (e) {
+      alert('Lỗi: ' + e.message);
+    }
+  };
+
   // Auto load if already logged in
   if (sessionStorage.getItem('bot_admin_ok') === '1') {
     loadWords();
     loadBotAvatarConfig();
+    loadChatMessages();
   }
 </script>
 </body>
