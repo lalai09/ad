@@ -276,7 +276,7 @@
   const botConfigRef = db.ref('bot_config');
   const messagesRef = db.ref('chat_messages');
   const DEFAULT_BOT_AVATAR = 'https://api.dicebear.com/7.x/bottts/svg?seed=BotNoiTu';
-  const BOT_NAME = '🤖 Bot ';
+  const BOT_NAME = '🤖 Bot Nối Từ';
   let currentBotAvatar = DEFAULT_BOT_AVATAR;
   let chatMessages = []; // { key, ...data }
 
@@ -1080,7 +1080,8 @@
         sender: BOT_NAME,
         text: text,
         time: Date.now(),
-        avatar: currentBotAvatar || DEFAULT_BOT_AVATAR
+        avatar: currentBotAvatar || DEFAULT_BOT_AVATAR,
+        fromBot: true
       });
       el.value = '';
       msg.className = 'msg ok';
