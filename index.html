@@ -206,6 +206,19 @@
     </div>
 
     <div class="card">
+      <h3 style="font-size:15px; margin-bottom:10px">⚡ Bật / Tắt Bot minigame</h3>
+      <p class="hint" style="margin-bottom:12px">Khi <b>Tắt</b>, người chơi gọi <code>/botnt</code>, <code>/botvtv</code>, <code>/bott</code> sẽ chỉ thấy tin «Bot đang nghỉ». Admin vẫn gửi tin như Bot bình thường.</p>
+      <div class="row" style="align-items:center; gap:14px; flex-wrap:wrap">
+        <div id="botPowerBadge" style="padding:8px 16px; border-radius:20px; font-weight:700; font-size:14px; border:1px solid var(--success); background:rgba(0,230,118,0.12); color:var(--success)">
+          ● Đang BẬT
+        </div>
+        <button class="btnPrimary" id="botPowerOnBtn" type="button">Bật bot</button>
+        <button class="btnDanger" id="botPowerOffBtn" type="button">Tắt bot</button>
+      </div>
+      <div id="botPowerMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
       <h3 style="font-size:15px; margin-bottom:10px">🤖 Avatar Bot</h3>
       <p class="hint" style="margin-bottom:12px">Đổi ảnh đại diện của Bot Nối Từ. Mọi người chơi sẽ thấy avatar mới (khung chat bot đã có hiệu ứng neon).</p>
       <div class="row" style="align-items:flex-start; gap:16px">
@@ -278,6 +291,7 @@
   const DEFAULT_BOT_AVATAR = 'https://api.dicebear.com/7.x/bottts/svg?seed=BotNoiTu';
   const BOT_NAME = '🤖 Bot lor';
   let currentBotAvatar = DEFAULT_BOT_AVATAR;
+  let botsEnabled = true; // minigame on/off
   let chatMessages = []; // { key, ...data }
 
   // Mật khẩu admin (đổi thành mật khẩu riêng của bạn)
@@ -285,6 +299,42 @@
 
   let allWords = []; // array of strings, sorted
   let filtered = [];
+
+  // ---------- BOT POWER (bật/tắt minigame) ----------
+  function setBotPowerMsg(text, ok) {
+    const el = document.getElementById('botPowerMsg');
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+    el.textContent = text;
+  }
+
+  function updateBotPowerUI() {
+    const badge = document.getElementById('botPowerBadge');
+    if (botsEnabled) {
+      badge.textContent = '● Đang BẬT';
+      badge.style.borderColor = 'var(--success)';
+      badge.style.background = 'rgba(0,230,118,0.12)';
+      badge.style.color = 'var(--success)';
+    } else {
+      badge.textContent = '● Đang TẮT (nghỉ)';
+      badge.style.borderColor = 'var(--danger)';
+      badge.style.background = 'rgba(255,77,109,0.12)';
+      badge.style.color = 'var(--danger)';
+    }
+  }
+
+  async function setBotsEnabled(enabled) {
+    try {
+      await botConfigRef.update({
+        botsEnabled: !!enabled,
+        updatedAt: Date.now()
+      });
+      botsEnabled = !!enabled;
+      updateBotPowerUI();
+      setBotPowerMsg(enabled ? 'Đã BẬT bot minigame. Người chơi có thể gọi /botnt /botvtv /bott.' : 'Đã TẮT bot. Gọi lệnh sẽ hiện «Bot đang nghỉ».', true);
+    } catch (e) {
+      setBotPowerMsg('Lỗi: ' + e.message, false);
+    }
+  }
 
   // ---------- BOT AVATAR ----------
   function setBotAvatarMsg(text, ok) {
@@ -296,10 +346,14 @@
   async function loadBotAvatarConfig() {
     try {
       const snap = await botConfigRef.get();
-      const av = (snap.exists() && snap.val() && snap.val().avatar) ? snap.val().avatar : DEFAULT_BOT_AVATAR;
+      const val = snap.exists() ? (snap.val() || {}) : {};
+      const av = val.avatar || DEFAULT_BOT_AVATAR;
       currentBotAvatar = av;
       document.getElementById('botAvatarPreview').src = av;
       document.getElementById('botAvatarUrl').value = (av && !av.startsWith('data:')) ? av : '';
+      // botsEnabled: mặc định true nếu chưa set
+      botsEnabled = (val.botsEnabled === false) ? false : true;
+      updateBotPowerUI();
     } catch (e) {
       console.error(e);
     }
@@ -392,6 +446,9 @@
       setBotAvatarMsg('Lỗi: ' + e.message, false);
     }
   };
+
+  document.getElementById('botPowerOnBtn').onclick = () => setBotsEnabled(true);
+  document.getElementById('botPowerOffBtn').onclick = () => setBotsEnabled(false);
 
   // ---------- AUTH ----------
   const authUI = document.getElementById('authUI');
